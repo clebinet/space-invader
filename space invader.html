@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Battle Royale Triangles Web</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas {
+      background: #000;
+      display: block;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const WIDTH = canvas.width;
+    const HEIGHT = canvas.height;
+
+    // --- Joueur ---
+    let playerX = WIDTH / 2;
+    let playerY = HEIGHT - 60;
+    let playerSize = 15;
+    let playerSpeed = 5;
+    let lives = 3;
+    let invulnerable = false;
+    let invulnTimer = 0;
+
+    // --- Ennemis ---
+    let enemies = [];
+    let enemySpawnRate = 100; // spawn toutes les 100 ms
+    setInterval(() => {
+      if (!shopOpen) {
+        enemies.push({x: Math.random() * (WIDTH - 40) + 20, y: 0});
+      }
+    }, enemySpawnRate);
+
+    // --- Projectiles ---
+    let bullets = [];
+    let lastShot = 0;
+    let bulletDelay = 300;
+
+    // --- Score et Spacecoins ---
+    let score = 0;
+    let spacecoins = parseInt(localStorage.getItem("spacecoins") || "0");
+
+    function saveSpacecoins() {
+      localStorage.setItem("spacecoins", spacecoins);
+    }
+
+    // --- Shop ---
+    let shopOpen = false;
+    let shopMessage = "";
+    let shopMessageTimer = 0;
+
+    // --- Zones tactiles ---
+    const buttons = {
+      shoot: {x: WIDTH - 120, y: HEIGHT - 100, w: 100, h: 80, label: "SHOOT"},
+      shop: {x: WIDTH / 2 - 60, y: HEIGHT - 100, w: 120, h: 40, label: "SHOP"}
+    };
+
+    // --- Joystick ---
+    const joystick = {
+      baseX: 80, baseY: HEIGHT - 80, radius: 50,
+      active: false, dx: 0
+    };
+
+    // --- Dessins ---
+    function drawPlayer() {
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.moveTo(playerX, playerY - playerSize);
+      ctx.lineTo(playerX - playerSize, playerY + playerSize);
+      ctx.lineTo(playerX + playerSize, playerY + playerSize);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawEnemy(enemy) {
+      ctx.fillStyle = "red";
+      ctx.beginPath();
+      ctx.moveTo(enemy.x, enemy.y - 15);
+      ctx.lineTo(enemy.x - 15, enemy.y + 15);
+      ctx.lineTo(enemy.x + 15, enemy.y + 15);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawBullet(bullet) {
+      ctx.fillStyle = "green";
+      ctx.beginPath();
+      ctx.arc(bullet.x, bullet.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawText(text, size, x, y, color="white") {
+      ctx.fillStyle = color;
+      ctx.font = size + "px Arial";
+      ctx.fillText(text, x, y);
+    }
+
+    function drawButtons() {
+      for (let key in buttons) {
+        let b = buttons[key];
+        ctx.fillStyle = "grey";
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.fillStyle = "white";
+        ctx.font = "20px Arial";
+        ctx.fillText(b.label, b.x + 10, b.y + 30);
+      }
+    }
+
+    function drawJoystick() {
+      ctx.strokeStyle = "grey";
+      ctx.beginPath();
+      ctx.arc(joystick.baseX, joystick.baseY, joystick.radius, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.fillStyle = "lightgrey";
+      ctx.beginPath();
+      ctx.arc(joystick.baseX + joystick.dx, joystick.baseY, 25, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    function drawShop() {
+      ctx.fillStyle = "purple";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      drawText("=== SHOP SPACECOINS ===", 40, WIDTH/2 - 200, 50);
+      drawText("1) Speed x2 (150 Spacecoins)", 30, 200, 150);
+      drawText("2) Invulnérabilité 10s (500 Spacecoins)", 30, 200, 200);
+      drawText("Tes Spacecoins: " + spacecoins, 30, 200, 300);
+
+      if (shopMessage && Date.now() < shopMessageTimer) {
+        drawText(shopMessage, 30, 200, 400, "red");
+      }
+
+      // Croix pour fermer
+      ctx.fillStyle = "red";
+      ctx.fillRect(WIDTH - 60, 20, 40, 40);
+      ctx.fillStyle = "white";
+      ctx.font = "30px Arial";
+      ctx.fillText("X", WIDTH - 50, 50);
+    }
+
+    // --- Gestion tactile ---
+    function handleTouch(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.touches ? e.touches[0].clientX - rect.left : e.offsetX;
+      const y = e.touches ? e.touches[0].clientY - rect.top : e.offsetY;
+
+      if (shopOpen) {
+        // Fermer boutique
+        if (x > WIDTH - 60 && x < WIDTH - 20 && y > 20 && y < 60) {
+          shopOpen = false;
+          return;
+        }
+        // Acheter Speed
+        if (x > 200 && x < 600 && y > 120 && y < 170) {
+          if (spacecoins >= 150) {
+            playerSpeed = 10;
+            spacecoins -= 150;
+            saveSpacecoins();
+            shopMessage = "✅ Speed x2 acheté !";
+            shopMessageTimer = Date.now() + 2000;
+          } else {
+            shopMessage = "❌ Pas assez de Spacecoins";
+            shopMessageTimer = Date.now() + 2000;
+          }
+        }
+        // Acheter Invulnérabilité
+        if (x > 200 && x < 700 && y > 170 && y < 220) {
+          if (spacecoins >= 500) {
+            invulnerable = true;
+            invulnTimer = Date.now();
+            spacecoins -= 500;
+            saveSpacecoins();
+            shopMessage = "✅ Invulnérabilité activée !";
+            shopMessageTimer = Date.now() + 2000;
+          } else {
+            shopMessage = "❌ Pas assez de Spacecoins";
+            shopMessageTimer = Date.now() + 2000;
+          }
+        }
+        return;
+      }
+
+      // Boutons tactiles
+      for (let key in buttons) {
+        let b = buttons[key];
+        if (x > b.x && x < b.x+b.w && y > b.y && y < b.y+b.h) {
+          if (key === "shoot") {
+            if (Date.now() - lastShot > bulletDelay) {
+              bullets.push({x: playerX, y: playerY - playerSize});
+              lastShot = Date.now();
+            }
+          } else if (key === "shop") {
+            shopOpen = !shopOpen;
+          }
+        }
+      }
+
+      // Joystick
+      const dx = x - joystick.baseX;
+      const dy = y - joystick.baseY;
+      if (Math.hypot(dx, dy) < joystick.radius) {
+        joystick.active = true;
+        joystick.dx = dx;
+      }
+    }
+
+    canvas.addEventListener("mousedown", handleTouch);
+    canvas.addEventListener("touchstart", handleTouch);
+
+    canvas.addEventListener("mouseup", () => { joystick.active = false; joystick.dx = 0; });
+    canvas.addEventListener("touchend", () => { joystick.active = false; joystick.dx = 0; });
+
+    // --- Gestion clavier ---
+    let keys = {};
+    document.addEventListener("keydown", (e) => {
+      keys[e.code] = true;
+      if (e.code === "Space") {
+        if (Date.now() - lastShot > bulletDelay && !shopOpen) {
+          bullets.push({x: playerX, y: playerY - playerSize});
+          lastShot = Date.now();
+        }
+      }
+      if (e.code === "KeyS") {
+        shopOpen = !shopOpen;
+      }
+    });
+    document.addEventListener("keyup", (e) => { keys[e.code] = false; });
+
+    // --- Boucle principale ---
+    function gameLoop() {
+      ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+      if (!shopOpen) {
+        // Déplacements joueur (joystick ou clavier)
+        if (joystick.active) {
+          if (joystick.dx < -10 && playerX - playerSize > 0) playerX -= playerSpeed;
+          if (joystick.dx > 10 && playerX + playerSize < WIDTH) playerX += playerSpeed;
+        } else {
+          if (keys["ArrowLeft"] && playerX - playerSize > 0) playerX -= playerSpeed;
+          if (keys["ArrowRight"] && playerX + playerSize < WIDTH) playerX += playerSpeed;
+        }
+
+        // Déplacement bullets
+        bullets.forEach((b, i) => {
+          b.y -= 7;
+          if (b.y < 0) bullets.splice(i, 1);
+        });
+
+        // Déplacement ennemis
+        enemies.forEach((e, i) => {
+          e.y += 2;
+          if (e.y > HEIGHT) enemies.splice(i, 1);
+        });
+
+        // Collisions bullets/enemies
+        bullets.forEach((b, bi) => {
+          enemies.forEach((e, ei) => {
+            if (Math.abs(b.x - e.x) < 20 && Math.abs(b.y - e.y) < 20) {
+              enemies.splice(ei, 1);
+              bullets.splice(bi, 1);
+              score += 10;
+              if (score % 50 === 0) {
+                spacecoins++;
+                saveSpacecoins();
+              }
+            }
+          });
+        });
+
+        // Collisions joueur/enemies
+        enemies.forEach((e, i) => {
+          if (Math.abs(playerX - e.x) < 20 && Math.abs(playerY - e.y) < 20) {
+            if (!invulnerable) {
+              lives--;
+              invulnerable = true;
+              invulnTimer = Date.now();
+            }
+            enemies.splice(i, 1);
+          }
+        });
+
+        if (invulnerable && Date.now() - invulnTimer > 2000) {
+          invulnerable = false;
+        }
+
+        if (lives <= 0) {
+          score = 0;
+          lives = 3;
+          playerX = WIDTH / 2;
+          enemies = [];
+          bullets = [];
+        }
+
+        // Dessins
+        drawPlayer();
+        enemies.forEach(drawEnemy);
+        bullets.forEach(drawBullet);
+        drawText("Score: " + score, 20, 10, 20);
+        drawText("Spacecoins: " + spacecoins, 20, 10, 40);
+        drawText("Vies: " + lives, 20, 10, 60);
+        drawButtons();
+        drawJoystick();
+      } else {
+        drawShop();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
