@@ -68,7 +68,9 @@ window.gameVars = {
   setInvulnerable: v=>invulnerable=v,
   infiniteInvuln: ()=>infiniteInvuln,
   setInfiniteInvuln: v=>infiniteInvuln=v
-};
+    fireDelay: () => fireDelay,
+    setFireDelay: (val) => { fireDelay = val; 
+    },
 
 // === Ennemis ===
 setInterval(()=>{
@@ -219,3 +221,4 @@ canvas.addEventListener("click",e=>{
 </script>
 </body>
 </html>
+
