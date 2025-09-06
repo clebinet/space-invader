@@ -42,6 +42,17 @@ let shopOpen = false;
 let paused = false;
 let gameOver = false;
 
+  // Rendre les variables accessibles depuis la console
+window.gameVars = {
+    spaceCoins: () => spaceCoins, // getter
+    setSpaceCoins: (val) => { spaceCoins = val; saveSpaceCoins(); },
+    lives: () => lives,
+    setLives: (val) => { lives = val; },
+    score: () => score,
+    setScore: (val) => { score = val; }
+};
+
+
 // --- Fire delay ---
 let lastShotTime = 0;
 const fireDelay = 300; // ms
@@ -252,6 +263,7 @@ loop();
 </script>
 </body>
 </html>
+
 
 
 
