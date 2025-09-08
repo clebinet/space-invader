@@ -68,9 +68,7 @@ window.gameVars = {
   setInvulnerable: v=>invulnerable=v,
   infiniteInvuln: ()=>infiniteInvuln,
   setInfiniteInvuln: v=>infiniteInvuln=v
-    fireDelay: () => fireDelay,
-    setFireDelay: (val) => { fireDelay = val; 
-    },
+};
 
 // === Ennemis ===
 setInterval(()=>{
@@ -83,7 +81,7 @@ setInterval(()=>{
       special: special
     });
   }
-},100); // spawn rate = 100ms
+},50); // spawn rate = 100ms
 
 function restartGame(){
   playerX = canvas.width/2; playerY = canvas.height-60;
@@ -220,5 +218,4 @@ canvas.addEventListener("click",e=>{
 });
 </script>
 </body>
-</html>
-
+</html
