@@ -1,25 +1,29 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Space Invaders Triangles</title>
-  <style>
-    body { background:black; margin:0; overflow:hidden; }
-    canvas { background:black; display:block; margin:0 auto; }
-    #touchControls { position:fixed; bottom:20px; left:20px; }
-    .btn {
-      background:grey; color:white; padding:15px; margin:5px;
-      border-radius:10px; font-size:20px; user-select:none;
-      display:inline-block; text-align:center;
-    }
-    #shopControls, #difficultyControls {
-      position:fixed; top:100px; left:100px; display:none;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Space Invaders Triangles</title>
+<style>
+body { background:black; margin:0; overflow:hidden; font-family:Arial, sans-serif; }
+canvas { background:black; display:block; margin:0 auto; }
+
+#touchControls, #shopControls, #difficultyControls {
+  position: fixed; left: 20px; display: none; flex-direction: column;
+  gap: 10px; /* espace entre boutons */
+}
+#touchControls { bottom:20px; display:flex; flex-direction:row; gap:5px; }
+.btn {
+  background:grey; color:white; padding:15px; border-radius:10px;
+  font-size:20px; user-select:none; text-align:center; cursor:pointer;
+}
+#shopControls { top:100px; left:120px; }
+#difficultyControls { top:400px; left:120px; }
+</style>
 </head>
 <body>
 <canvas id="gameCanvas" width="800" height="600"></canvas>
 
+<!-- Touch controls -->
 <div id="touchControls">
   <div class="btn" id="leftBtn">◀</div>
   <div class="btn" id="rightBtn">▶</div>
@@ -29,12 +33,14 @@
   <div class="btn" id="restartBtn">🔄</div>
 </div>
 
+<!-- Shop buttons -->
 <div id="shopControls">
   <div class="btn" id="speedBtn">Speed x2 (10000 SC)</div>
-  <div class="btn" id="invulnBtn">Invulnérabilité 1min (20000 SC)</div>
+  <div class="btn" id="invulnBtn">Invuln 1min (20000 SC)</div>
   <div class="btn" id="mitraBtn">Mitraillette 1min (15000 SC)</div>
 </div>
 
+<!-- Difficulty buttons -->
 <div id="difficultyControls">
   <div class="btn" id="facileBtn">Facile</div>
   <div class="btn" id="moyenBtn">Moyen</div>
@@ -45,24 +51,32 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
+// Player
 let playerX = canvas.width/2, playerY = canvas.height-60;
 let playerSize = 15, playerSpeed = 5;
-let lives = 3, invulnerable = false, invulnTimer = 0, infiniteInvuln = false;
-let bullets = [], enemies = [], score = 0;
-let spaceCoins = parseInt(localStorage.getItem("spaceCoins") || "0");
-let lastShot = 0, fireDelay = 300;
-let shopOpen = false, pause = false, gameOver = false, shopMessage="", shopMessageTimer=0;
+let lives = 3, invulnerable=false, invulnTimer=0, infiniteInvuln=false;
 
+// Bullets and enemies
+let bullets=[], enemies=[], score=0;
+let spaceCoins=parseInt(localStorage.getItem("spaceCoins")||"0");
+let lastShot=0, fireDelay=300;
 let mitrailletteActive=false, mitrailletteTimer=0;
-let difficulty = "Moyen";
-let enemyBaseSpeed = 2.5;
-let enemySpawnInterval = 50;
 
+// Game state
+let shopOpen=false, pause=false, gameOver=false;
+let shopMessage="", shopMessageTimer=0;
+
+// Difficulty
+let difficulty="Moyen";
+let enemyBaseSpeed=2.5;
+let enemySpawnInterval=50;
+
+// Key handling
 let keys = {};
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
+document.addEventListener("keydown", e=>keys[e.key]=true);
+document.addEventListener("keyup", e=>keys[e.key]=false);
 
-// Touch controls
+// Touch buttons
 document.getElementById("leftBtn").addEventListener("touchstart", ()=> keys["ArrowLeft"]=true);
 document.getElementById("leftBtn").addEventListener("touchend", ()=> keys["ArrowLeft"]=false);
 document.getElementById("rightBtn").addEventListener("touchstart", ()=> keys["ArrowRight"]=true);
@@ -70,17 +84,27 @@ document.getElementById("rightBtn").addEventListener("touchend", ()=> keys["Arro
 document.getElementById("shootBtn").addEventListener("touchstart", ()=> keys[" "] = true);
 document.getElementById("shootBtn").addEventListener("touchend", ()=> keys[" "] = false);
 
+// Shop and pause buttons
 document.getElementById("shopBtn").addEventListener("click", ()=>{
-    shopOpen=!shopOpen;
-    document.getElementById("shopControls").style.display = shopOpen ? "block" : "none";
-    document.getElementById("difficultyControls").style.display = shopOpen ? "block" : "none";
+    shopOpen = !shopOpen;
+    document.getElementById("shopControls").style.display = shopOpen ? "flex":"none";
+    document.getElementById("difficultyControls").style.display = shopOpen ? "flex":"none";
 });
 document.getElementById("pauseBtn").addEventListener("click", ()=> pause=!pause);
 document.getElementById("restartBtn").addEventListener("click", restartGame);
 
-// Shop buttons
+// Save SC
+function saveSpaceCoins(){ localStorage.setItem("spaceCoins", spaceCoins); }
+
+// Show temporary message
+function showMessage(msg){
+    shopMessage = msg;
+    shopMessageTimer = Date.now() + 2000;
+}
+
+// === Boosters ===
 document.getElementById("speedBtn").addEventListener("click", ()=>{
-    if(spaceCoins>=10000){ spaceCoins-=10000; saveSpaceCoins(); playerSpeed*=2; showMessage("Vitesse augmentée !"); } 
+    if(spaceCoins>=10000){ spaceCoins-=10000; saveSpaceCoins(); playerSpeed*=2; showMessage("Vitesse augmentée !"); }
     else showMessage("Pas assez de SC !");
 });
 document.getElementById("invulnBtn").addEventListener("click", ()=>{
@@ -92,140 +116,131 @@ document.getElementById("mitraBtn").addEventListener("click", ()=>{
     else showMessage("Pas assez de SC !");
 });
 
-// Difficulty buttons
-document.getElementById("facileBtn").addEventListener("click", ()=> setDifficulty("facile"));
-document.getElementById("moyenBtn").addEventListener("click", ()=> setDifficulty("moyen"));
-document.getElementById("difficileBtn").addEventListener("click", ()=> setDifficulty("difficile"));
-
-function saveSpaceCoins(){ localStorage.setItem("spaceCoins", spaceCoins); }
-
-function showMessage(msg){ shopMessage=msg; shopMessageTimer=Date.now()+2000; }
+// === Difficulty buttons ===
+document.getElementById("facileBtn").addEventListener("click", ()=>setDifficulty("facile"));
+document.getElementById("moyenBtn").addEventListener("click", ()=>setDifficulty("moyen"));
+document.getElementById("difficileBtn").addEventListener("click", ()=>setDifficulty("difficile"));
 
 function setDifficulty(level){
-    if(level==="facile"){ difficulty="Facile"; enemyBaseSpeed=1.5; enemySpawnInterval=70; showMessage("Difficulté Facile activée !"); }
-    if(level==="moyen"){ difficulty="Moyen"; enemyBaseSpeed=2.5; enemySpawnInterval=50; showMessage("Difficulté Moyen activée !"); }
-    if(level==="difficile"){ difficulty="Difficile"; enemyBaseSpeed=4; enemySpawnInterval=30; showMessage("Difficulté Difficile activée !"); }
+    if(level==="facile"){
+        difficulty="Facile"; enemyBaseSpeed=1.5; enemySpawnInterval=70; showMessage("Difficulté Facile activée !");
+    }
+    if(level==="moyen"){
+        difficulty="Moyen"; enemyBaseSpeed=2.5; enemySpawnInterval=50; showMessage("Difficulté Moyen activée !");
+    }
+    if(level==="difficile"){
+        difficulty="Difficile"; enemyBaseSpeed=4; enemySpawnInterval=30; showMessage("Difficulté Difficile activée !");
+    }
 }
 
-// Enemy spawn dynamique
+// Restart game
+function restartGame(){
+    playerX = canvas.width/2; playerY = canvas.height-60;
+    lives=3; bullets=[]; enemies=[]; score=0; invulnerable=false; invulnTimer=0; gameOver=false;
+}
+
+// Draw functions
+function drawPlayer(){
+    ctx.fillStyle = invulnerable ? "cyan" : "white";
+    ctx.beginPath();
+    ctx.moveTo(playerX,playerY-playerSize);
+    ctx.lineTo(playerX-playerSize,playerY+playerSize);
+    ctx.lineTo(playerX+playerSize,playerY+playerSize);
+    ctx.closePath();
+    ctx.fill();
+}
+function drawEnemy(e){
+    ctx.fillStyle = e.special ? "gold" : "red";
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y-15);
+    ctx.lineTo(e.x-15, e.y+15);
+    ctx.lineTo(e.x+15, e.y+15);
+    ctx.closePath();
+    ctx.fill();
+}
+function drawBullet(b){
+    ctx.fillStyle="lime";
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,5,0,Math.PI*2);
+    ctx.fill();
+}
+function drawText(t,x,y,s=30,c="white"){
+    ctx.fillStyle=c; ctx.font=s+"px Arial"; ctx.fillText(t,x,y);
+}
+
+// Draw UI messages
+function drawUI(){
+    drawText("Score: "+score,10,30);
+    drawText("SpaceCoins: "+spaceCoins,10,60);
+    drawText("Vies: "+lives,10,90);
+    if(shopMessage && Date.now()<shopMessageTimer) drawText(shopMessage, 200, 80,25,"red");
+    if(pause) drawText("=== PAUSE ===",canvas.width/2-100,canvas.height/2,40,"yellow");
+    if(gameOver){
+        drawText("=== GAME OVER ===",canvas.width/2-120,canvas.height/2-20,40,"red");
+        drawText("Appuie sur 🔄 pour recommencer",canvas.width/2-180,canvas.height/2+40,25,"white");
+    }
+}
+
+// Update loop
+function update(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(!pause && !gameOver){
+        // Player movement
+        if(keys["ArrowLeft"] && playerX-playerSize>0) playerX-=playerSpeed;
+        if(keys["ArrowRight"] && playerX+playerSize<canvas.width) playerX+=playerSpeed;
+        // Shooting
+        if(keys[" "] && Date.now()-lastShot>fireDelay){
+            bullets.push({x:playerX,y:playerY-playerSize});
+            lastShot=Date.now();
+        }
+        // Update bullets
+        bullets.forEach(b=>b.y-=7);
+        bullets = bullets.filter(b=>b.y>0);
+        // Update enemies
+        enemies.forEach(e=>e.y+=e.speed);
+        enemies = enemies.filter(e=>e.y<canvas.height);
+        // Collisions bullets-enemies
+        bullets.forEach((b,bi)=>{
+            enemies.forEach((e,ei)=>{
+                if(Math.abs(b.x-e.x)<20 && Math.abs(b.y-e.y)<20){
+                    enemies.splice(ei,1); bullets.splice(bi,1);
+                    score+=10;
+                    spaceCoins+= e.special ? 2 : 1; saveSpaceCoins();
+                }
+            });
+        });
+        // Collisions player-enemies
+        enemies.forEach((e,ei)=>{
+            if(Math.abs(playerX-e.x)<20 && Math.abs(playerY-e.y)<20){
+                if(!invulnerable && !infiniteInvuln){
+                    lives--; invulnerable=true; invulnTimer=Date.now();
+                }
+                enemies.splice(ei,1);
+            }
+        });
+        // Invuln timeout
+        if(invulnerable && Date.now()-invulnTimer>2000) invulnerable=false;
+        if(mitrailletteActive && Date.now()-mitrailletteTimer>60000){ fireDelay=300; mitrailletteActive=false; }
+        if(lives<=0) gameOver=true;
+    }
+
+    // Draw everything
+    drawPlayer();
+    enemies.forEach(drawEnemy);
+    bullets.forEach(drawBullet);
+    drawUI();
+}
+setInterval(update,1000/60);
+
+// Enemy spawn (dynamic)
 function spawnEnemy(){
     if(!shopOpen && !pause && !gameOver){
         const special = Math.random() < 1/(15*60*10);
-        enemies.push({ x: Math.random()*canvas.width, y:0, speed: enemyBaseSpeed+Math.random()*3, special });
+        enemies.push({ x:Math.random()*canvas.width, y:0, speed:enemyBaseSpeed+Math.random()*3, special });
     }
     setTimeout(spawnEnemy, enemySpawnInterval);
 }
 spawnEnemy();
-
-function restartGame(){
-  playerX = canvas.width/2; playerY = canvas.height-60;
-  lives = 3; bullets = []; enemies = [];
-  score = 0; invulnerable = false; invulnTimer = 0; gameOver = false;
-  playerSpeed = 5; fireDelay = 300; mitrailletteActive=false;
-}
-
-function drawPlayer(){
-  ctx.fillStyle="white";
-  ctx.beginPath();
-  ctx.moveTo(playerX, playerY-playerSize);
-  ctx.lineTo(playerX-playerSize, playerY+playerSize);
-  ctx.lineTo(playerX+playerSize, playerY+playerSize);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function drawEnemy(e){
-  ctx.fillStyle = e.special ? "gold" : "red";
-  ctx.beginPath();
-  ctx.moveTo(e.x, e.y-15);
-  ctx.lineTo(e.x-15, e.y+15);
-  ctx.lineTo(e.x+15, e.y+15);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function drawBullet(b){
-  ctx.fillStyle="lime";
-  ctx.beginPath();
-  ctx.arc(b.x,b.y,5,0,Math.PI*2);
-  ctx.fill();
-}
-
-function drawText(t,x,y,s=30,c="white"){
-  ctx.fillStyle=c; ctx.font=s+"px Arial"; ctx.fillText(t,x,y);
-}
-
-function update(){
-  if(pause || gameOver){ drawUI(); return; }
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // Déplacements
-  if(keys["ArrowLeft"] && playerX-playerSize>0) playerX-=playerSpeed;
-  if(keys["ArrowRight"] && playerX+playerSize<canvas.width) playerX+=playerSpeed;
-  if(keys[" "] && Date.now()-lastShot>fireDelay){ bullets.push({x:playerX,y:playerY-playerSize}); lastShot=Date.now(); }
-
-  // Bullets
-  bullets.forEach(b=> b.y-=7);
-  bullets = bullets.filter(b=> b.y>0);
-
-  // Ennemis
-  enemies.forEach(e=> e.y+=e.speed);
-  enemies = enemies.filter(e=> e.y<canvas.height);
-
-  // Collisions bullets-enemies
-  bullets.forEach((b,bi)=>{
-    enemies.forEach((e,ei)=>{
-      if(Math.abs(b.x-e.x)<20 && Math.abs(b.y-e.y)<20){
-        enemies.splice(ei,1); bullets.splice(bi,1);
-        score+=10;
-        spaceCoins += e.special ? 2 : 1;
-        saveSpaceCoins();
-      }
-    });
-  });
-
-  // Collisions player-enemies
-  enemies.forEach((e,ei)=>{
-    if(Math.abs(playerX-e.x)<20 && Math.abs(playerY-e.y)<20){
-      if(!invulnerable && !infiniteInvuln){
-        lives--; invulnerable=true; invulnTimer=Date.now();
-      }
-      enemies.splice(ei,1);
-    }
-  });
-
-  // Invulnerability timers
-  if(invulnerable && Date.now()-invulnTimer>2000) invulnerable=false;
-  if(mitrailletteActive && Date.now()-mitrailletteTimer>60000){ fireDelay=300; mitrailletteActive=false; }
-
-  if(lives<=0) gameOver=true;
-
-  // Dessin
-  drawPlayer();
-  enemies.forEach(drawEnemy);
-  bullets.forEach(drawBullet);
-
-  drawText("Score: "+score,10,30);
-  drawText("SpaceCoins: "+spaceCoins,10,60);
-  drawText("Vies: "+lives,10,90);
-  drawText("Difficulté: "+difficulty,10,120);
-
-  drawUI();
-}
-
-function drawUI(){
-  if(shopOpen){
-    ctx.fillStyle="rgba(128,0,128,0.7)"; ctx.fillRect(80,80,640,500);
-    if(shopMessage && Date.now()<shopMessageTimer) drawText(shopMessage,100,600,25,"red");
-  }
-  if(pause) drawText("=== PAUSE ===",canvas.width/2-100,canvas.height/2,40,"yellow");
-  if(gameOver){
-    drawText("=== GAME OVER ===",canvas.width/2-120,canvas.height/2-20,40,"red");
-    drawText("Appuie sur 🔄 pour recommencer",canvas.width/2-180,canvas.height/2+40,25,"white");
-  }
-}
-
-setInterval(update,1000/60);
 </script>
 </body>
 </html>
