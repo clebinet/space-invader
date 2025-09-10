@@ -4,26 +4,21 @@
 <meta charset="UTF-8">
 <title>Space Invaders Triangles</title>
 <style>
-body { background:black; margin:0; overflow:hidden; font-family:Arial, sans-serif; }
+body { background:black; margin:0; overflow:hidden; }
 canvas { background:black; display:block; margin:0 auto; }
-
-#touchControls, #shopControls, #difficultyControls {
-  position: fixed; left: 20px; display: none; flex-direction: column;
-  gap: 10px; /* espace entre boutons */
-}
-#touchControls { bottom:20px; display:flex; flex-direction:row; gap:5px; }
+#touchControls { position:fixed; bottom:20px; left:20px; }
 .btn {
-  background:grey; color:white; padding:15px; border-radius:10px;
-  font-size:20px; user-select:none; text-align:center; cursor:pointer;
+  background:grey; color:white; padding:15px; margin:5px;
+  border-radius:10px; font-size:20px; user-select:none;
+  display:inline-block; text-align:center;
 }
-#shopControls { top:100px; left:120px; }
-#difficultyControls { top:400px; left:120px; }
+#difficultyMenu { position:fixed; top:20px; right:20px; background:#222; color:white; padding:10px; border-radius:10px; }
+.diffBtn { margin:5px; padding:5px 10px; cursor:pointer; background:grey; border-radius:5px; display:inline-block; }
 </style>
 </head>
 <body>
 <canvas id="gameCanvas" width="800" height="600"></canvas>
 
-<!-- Touch controls -->
 <div id="touchControls">
   <div class="btn" id="leftBtn">◀</div>
   <div class="btn" id="rightBtn">▶</div>
@@ -33,48 +28,29 @@ canvas { background:black; display:block; margin:0 auto; }
   <div class="btn" id="restartBtn">🔄</div>
 </div>
 
-<!-- Shop buttons -->
-<div id="shopControls">
-  <div class="btn" id="speedBtn">Speed x2 (10000 SC)</div>
-  <div class="btn" id="invulnBtn">Invuln 1min (20000 SC)</div>
-  <div class="btn" id="mitraBtn">Mitraillette 1min (15000 SC)</div>
-</div>
-
-<!-- Difficulty buttons -->
-<div id="difficultyControls">
-  <div class="btn" id="facileBtn">Facile</div>
-  <div class="btn" id="moyenBtn">Moyen</div>
-  <div class="btn" id="difficileBtn">Difficile</div>
+<div id="difficultyMenu">
+  <div class="diffBtn" data-diff="Facile">Facile</div>
+  <div class="diffBtn" data-diff="Moyen">Moyen</div>
+  <div class="diffBtn" data-diff="Difficile">Difficile</div>
 </div>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Player
 let playerX = canvas.width/2, playerY = canvas.height-60;
 let playerSize = 15, playerSpeed = 5;
-let lives = 3, invulnerable=false, invulnTimer=0, infiniteInvuln=false;
+let lives = 3, invulnerable = false, invulnTimer = 0, infiniteInvuln = false;
 
-// Bullets and enemies
-let bullets=[], enemies=[], score=0;
-let spaceCoins=parseInt(localStorage.getItem("spaceCoins")||"0");
-let lastShot=0, fireDelay=300;
-let mitrailletteActive=false, mitrailletteTimer=0;
+let bullets = [], enemies = [], score = 0;
+let spaceCoins = parseInt(localStorage.getItem("spaceCoins") || "0");
+let lastShot = 0, fireDelay = 300;
+let shopOpen = false, pause = false, gameOver = false;
+let shopMessage = "", shopMessageTimer = 0;
 
-// Game state
-let shopOpen=false, pause=false, gameOver=false;
-let shopMessage="", shopMessageTimer=0;
-
-// Difficulty
-let difficulty="Moyen";
-let enemyBaseSpeed=2.5;
-let enemySpawnInterval=50;
-
-// Key handling
 let keys = {};
-document.addEventListener("keydown", e=>keys[e.key]=true);
-document.addEventListener("keyup", e=>keys[e.key]=false);
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
 
 // Touch buttons
 document.getElementById("leftBtn").addEventListener("touchstart", ()=> keys["ArrowLeft"]=true);
@@ -83,164 +59,243 @@ document.getElementById("rightBtn").addEventListener("touchstart", ()=> keys["Ar
 document.getElementById("rightBtn").addEventListener("touchend", ()=> keys["ArrowRight"]=false);
 document.getElementById("shootBtn").addEventListener("touchstart", ()=> keys[" "] = true);
 document.getElementById("shootBtn").addEventListener("touchend", ()=> keys[" "] = false);
-
-// Shop and pause buttons
-document.getElementById("shopBtn").addEventListener("click", ()=>{
-    shopOpen = !shopOpen;
-    document.getElementById("shopControls").style.display = shopOpen ? "flex":"none";
-    document.getElementById("difficultyControls").style.display = shopOpen ? "flex":"none";
-});
+document.getElementById("shopBtn").addEventListener("click", ()=> shopOpen=!shopOpen);
 document.getElementById("pauseBtn").addEventListener("click", ()=> pause=!pause);
 document.getElementById("restartBtn").addEventListener("click", restartGame);
 
-// Save SC
 function saveSpaceCoins(){ localStorage.setItem("spaceCoins", spaceCoins); }
 
-// Show temporary message
-function showMessage(msg){
-    shopMessage = msg;
-    shopMessageTimer = Date.now() + 2000;
-}
+// Cheats console
+window.gameVars = {
+  spaceCoins: ()=>spaceCoins,
+  setSpaceCoins: v=>{ spaceCoins=v; saveSpaceCoins(); },
+  score: ()=>score,
+  setScore: v=>score=v,
+  lives: ()=>lives,
+  setLives: v=>lives=v,
+  invulnerable: ()=>invulnerable,
+  setInvulnerable: v=>invulnerable=v,
+  infiniteInvuln: ()=>infiniteInvuln,
+  setInfiniteInvuln: v=>infiniteInvuln=v
+};
 
-// === Boosters ===
-document.getElementById("speedBtn").addEventListener("click", ()=>{
-    if(spaceCoins>=10000){ spaceCoins-=10000; saveSpaceCoins(); playerSpeed*=2; showMessage("Vitesse augmentée !"); }
-    else showMessage("Pas assez de SC !");
+// === Difficulty ===
+let difficulty = "Facile";
+let enemyBaseSpeed = 2;
+const diffButtons = document.querySelectorAll(".diffBtn");
+diffButtons.forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    difficulty = btn.dataset.diff;
+    enemyBaseSpeed = difficulty==="Facile"?2:difficulty==="Moyen"?3:4;
+    startEnemySpawn();
+  });
 });
-document.getElementById("invulnBtn").addEventListener("click", ()=>{
-    if(spaceCoins>=20000){ spaceCoins-=20000; saveSpaceCoins(); invulnerable=true; invulnTimer=Date.now(); showMessage("Invulnérabilité activée !"); }
-    else showMessage("Pas assez de SC !");
-});
-document.getElementById("mitraBtn").addEventListener("click", ()=>{
-    if(spaceCoins>=15000){ spaceCoins-=15000; saveSpaceCoins(); fireDelay=100; mitrailletteActive=true; mitrailletteTimer=Date.now(); showMessage("Mitraillette activée !"); }
-    else showMessage("Pas assez de SC !");
-});
 
-// === Difficulty buttons ===
-document.getElementById("facileBtn").addEventListener("click", ()=>setDifficulty("facile"));
-document.getElementById("moyenBtn").addEventListener("click", ()=>setDifficulty("moyen"));
-document.getElementById("difficileBtn").addEventListener("click", ()=>setDifficulty("difficile"));
+// === Enemies spawn ===
+let enemySpawnInterval = null;
+function startEnemySpawn(){
+  if(enemySpawnInterval) clearInterval(enemySpawnInterval);
+  let spawnDelay = 250;
+  if(difficulty==="Moyen") spawnDelay=100;
+  if(difficulty==="Difficile") spawnDelay=35;
 
-function setDifficulty(level){
-    if(level==="facile"){
-        difficulty="Facile"; enemyBaseSpeed=1.5; enemySpawnInterval=70; showMessage("Difficulté Facile activée !");
-    }
-    if(level==="moyen"){
-        difficulty="Moyen"; enemyBaseSpeed=2.5; enemySpawnInterval=50; showMessage("Difficulté Moyen activée !");
-    }
-    if(level==="difficile"){
-        difficulty="Difficile"; enemyBaseSpeed=4; enemySpawnInterval=30; showMessage("Difficulté Difficile activée !");
-    }
-}
-
-// Restart game
-function restartGame(){
-    playerX = canvas.width/2; playerY = canvas.height-60;
-    lives=3; bullets=[]; enemies=[]; score=0; invulnerable=false; invulnTimer=0; gameOver=false;
-}
-
-// Draw functions
-function drawPlayer(){
-    ctx.fillStyle = invulnerable ? "cyan" : "white";
-    ctx.beginPath();
-    ctx.moveTo(playerX,playerY-playerSize);
-    ctx.lineTo(playerX-playerSize,playerY+playerSize);
-    ctx.lineTo(playerX+playerSize,playerY+playerSize);
-    ctx.closePath();
-    ctx.fill();
-}
-function drawEnemy(e){
-    ctx.fillStyle = e.special ? "gold" : "red";
-    ctx.beginPath();
-    ctx.moveTo(e.x, e.y-15);
-    ctx.lineTo(e.x-15, e.y+15);
-    ctx.lineTo(e.x+15, e.y+15);
-    ctx.closePath();
-    ctx.fill();
-}
-function drawBullet(b){
-    ctx.fillStyle="lime";
-    ctx.beginPath();
-    ctx.arc(b.x,b.y,5,0,Math.PI*2);
-    ctx.fill();
-}
-function drawText(t,x,y,s=30,c="white"){
-    ctx.fillStyle=c; ctx.font=s+"px Arial"; ctx.fillText(t,x,y);
-}
-
-// Draw UI messages
-function drawUI(){
-    drawText("Score: "+score,10,30);
-    drawText("SpaceCoins: "+spaceCoins,10,60);
-    drawText("Vies: "+lives,10,90);
-    if(shopMessage && Date.now()<shopMessageTimer) drawText(shopMessage, 200, 80,25,"red");
-    if(pause) drawText("=== PAUSE ===",canvas.width/2-100,canvas.height/2,40,"yellow");
-    if(gameOver){
-        drawText("=== GAME OVER ===",canvas.width/2-120,canvas.height/2-20,40,"red");
-        drawText("Appuie sur 🔄 pour recommencer",canvas.width/2-180,canvas.height/2+40,25,"white");
-    }
-}
-
-// Update loop
-function update(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    if(!pause && !gameOver){
-        // Player movement
-        if(keys["ArrowLeft"] && playerX-playerSize>0) playerX-=playerSpeed;
-        if(keys["ArrowRight"] && playerX+playerSize<canvas.width) playerX+=playerSpeed;
-        // Shooting
-        if(keys[" "] && Date.now()-lastShot>fireDelay){
-            bullets.push({x:playerX,y:playerY-playerSize});
-            lastShot=Date.now();
-        }
-        // Update bullets
-        bullets.forEach(b=>b.y-=7);
-        bullets = bullets.filter(b=>b.y>0);
-        // Update enemies
-        enemies.forEach(e=>e.y+=e.speed);
-        enemies = enemies.filter(e=>e.y<canvas.height);
-        // Collisions bullets-enemies
-        bullets.forEach((b,bi)=>{
-            enemies.forEach((e,ei)=>{
-                if(Math.abs(b.x-e.x)<20 && Math.abs(b.y-e.y)<20){
-                    enemies.splice(ei,1); bullets.splice(bi,1);
-                    score+=10;
-                    spaceCoins+= e.special ? 2 : 1; saveSpaceCoins();
-                }
-            });
-        });
-        // Collisions player-enemies
-        enemies.forEach((e,ei)=>{
-            if(Math.abs(playerX-e.x)<20 && Math.abs(playerY-e.y)<20){
-                if(!invulnerable && !infiniteInvuln){
-                    lives--; invulnerable=true; invulnTimer=Date.now();
-                }
-                enemies.splice(ei,1);
-            }
-        });
-        // Invuln timeout
-        if(invulnerable && Date.now()-invulnTimer>2000) invulnerable=false;
-        if(mitrailletteActive && Date.now()-mitrailletteTimer>60000){ fireDelay=300; mitrailletteActive=false; }
-        if(lives<=0) gameOver=true;
-    }
-
-    // Draw everything
-    drawPlayer();
-    enemies.forEach(drawEnemy);
-    bullets.forEach(drawBullet);
-    drawUI();
-}
-setInterval(update,1000/60);
-
-// Enemy spawn (dynamic)
-function spawnEnemy(){
+  enemySpawnInterval = setInterval(()=>{
     if(!shopOpen && !pause && !gameOver){
-        const special = Math.random() < 1/(15*60*10);
-        enemies.push({ x:Math.random()*canvas.width, y:0, speed:enemyBaseSpeed+Math.random()*3, special });
+      enemies.push({x:Math.random()*canvas.width, y:0, speed: enemyBaseSpeed+Math.random()*2, special: false});
     }
-    setTimeout(spawnEnemy, enemySpawnInterval);
+  }, spawnDelay);
 }
-spawnEnemy();
+startEnemySpawn();
+
+// === Restart ===
+function restartGame(){
+  playerX = canvas.width/2; playerY = canvas.height-60;
+  lives = 3; bullets = []; enemies = [];
+  score = 0; invulnerable = false; invulnTimer = 0; gameOver = false;
+}
+
+// === Draw functions ===
+function drawPlayer(){
+  ctx.fillStyle="white";
+  ctx.beginPath();
+  ctx.moveTo(playerX, playerY-playerSize);
+  ctx.lineTo(playerX-playerSize, playerY+playerSize);
+  ctx.lineTo(playerX+playerSize, playerY+playerSize);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function getRainbowColor(){
+    const t = Date.now()/100;
+    const r = Math.floor(Math.sin(t)*127 + 128);
+    const g = Math.floor(Math.sin(t+2)*127 + 128);
+    const b = Math.floor(Math.sin(t+4)*127 + 128);
+    return `rgb(${r},${g},${b})`;
+}
+
+function drawEnemy(e){
+  ctx.fillStyle = e.special ? getRainbowColor() : "red";
+  ctx.beginPath();
+  ctx.moveTo(e.x, e.y-15);
+  ctx.lineTo(e.x-15, e.y+15);
+  ctx.lineTo(e.x+15, e.y+15);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawBullet(b){
+  ctx.fillStyle="lime";
+  ctx.beginPath();
+  ctx.arc(b.x,b.y,5,0,Math.PI*2);
+  ctx.fill();
+}
+
+function drawText(t,x,y,s=30,c="white"){
+  ctx.fillStyle=c; ctx.font=s+"px Arial"; ctx.fillText(t,x,y);
+}
+
+// === Easter Egg ===
+const konamiSequence = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","a","b","Enter"];
+let konamiIndex = 0;
+let easterEggActive = false;
+let easterEggDurationEnd = 0;
+let easterEggCooldownEnd = parseInt(localStorage.getItem("easterEggCooldownEnd")) || 0;
+
+document.addEventListener("keydown", e=>{
+    const storedCooldown = parseInt(localStorage.getItem("easterEggCooldownEnd")) || 0;
+    if(Date.now() < storedCooldown) return;
+
+    if(e.key === konamiSequence[konamiIndex]){
+        konamiIndex++;
+        if(konamiIndex === konamiSequence.length){
+            easterEggActive = true;
+            easterEggDurationEnd = Date.now() + 60000; // 1 minute
+            const cooldown = Date.now() + 10*60*1000; // 10 min
+            localStorage.setItem("easterEggCooldownEnd", cooldown);
+            konamiIndex = 0;
+        }
+    } else konamiIndex = 0;
+});
+
+function updateEasterEgg(){
+    if(easterEggActive && Date.now() > easterEggDurationEnd){
+        easterEggActive = false;
+    }
+}
+
+// === Update ===
+function update(){
+  if(pause || gameOver){ drawUI(); return; }
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Déplacements
+  if(keys["ArrowLeft"] && playerX-playerSize>0) playerX-=playerSpeed;
+  if(keys["ArrowRight"] && playerX+playerSize<canvas.width) playerX+=playerSpeed;
+  if(keys[" "] && Date.now()-lastShot>fireDelay){
+    bullets.push({x:playerX,y:playerY-playerSize});
+    lastShot=Date.now();
+  }
+
+  // Bullets
+  bullets.forEach(b=> b.y-=7);
+  bullets = bullets.filter(b=> b.y>0);
+
+  // Ennemis
+  enemies.forEach(e=> e.y+=e.speed);
+  enemies = enemies.filter(e=> e.y<canvas.height);
+
+  // Easter Egg - all enemies special
+  updateEasterEgg();
+  if(easterEggActive){
+    enemies.forEach(e=> e.special = true);
+  }
+
+  // Collisions
+  bullets.forEach((b,bi)=>{
+    enemies.forEach((e,ei)=>{
+      if(Math.abs(b.x-e.x)<20 && Math.abs(b.y-e.y)<20){
+        enemies.splice(ei,1); bullets.splice(bi,1);
+        score+=10;
+        spaceCoins += e.special ? 2 : 1;
+        saveSpaceCoins();
+      }
+    });
+  });
+
+  enemies.forEach((e,ei)=>{
+    if(Math.abs(playerX-e.x)<20 && Math.abs(playerY-e.y)<20){
+      if(!invulnerable && !infiniteInvuln){
+        lives--; invulnerable=true; invulnTimer=Date.now();
+      }
+      enemies.splice(ei,1);
+    }
+  });
+
+  if(invulnerable && Date.now()-invulnTimer>2000) invulnerable=false;
+  if(lives<=0) gameOver=true;
+
+  // Dessin
+  drawPlayer();
+  enemies.forEach(drawEnemy);
+  bullets.forEach(drawBullet);
+
+  drawText("Score: "+score,10,30);
+  drawText("SpaceCoins: "+spaceCoins,10,60);
+  drawText("Vies: "+lives,10,90);
+
+  drawUI();
+}
+
+// === UI ===
+function drawUI(){
+  if(shopOpen){
+    ctx.fillStyle="purple"; ctx.fillRect(100,100,600,400);
+    drawText("=== SHOP SPACECOINS ===",200,150,30);
+    drawText("1) Speed x2 (10000 SC)",200,220,25);
+    drawText("2) Invulnérabilité 1min (20000 SC)",200,260,25);
+    drawText("3) Mitraillette 1min (15000 SC)",200,300,25);
+    drawText("Tes SC: "+spaceCoins,200,360,25);
+    if(shopMessage && Date.now()<shopMessageTimer){
+      drawText(shopMessage,200,400,25,"red");
+    }
+  }
+  if(pause){
+    drawText("=== PAUSE ===",canvas.width/2-100,canvas.height/2,40,"yellow");
+  }
+  if(gameOver){
+    drawText("=== GAME OVER ===",canvas.width/2-120,canvas.height/2-20,40,"red");
+    drawText("Appuie sur 🔄 pour recommencer",canvas.width/2-180,canvas.height/2+40,25,"white");
+  }
+}
+
+// === Shop click ===
+canvas.addEventListener("click",e=>{
+  if(shopOpen){
+    const mx=e.offsetX,my=e.offsetY;
+    if(my>200 && my<230){ // speed
+      if(spaceCoins>=10000){
+        spaceCoins-=10000; saveSpaceCoins();
+        playerSpeed*=2; shopMessage="Vitesse augmentée !"; shopMessageTimer=Date.now()+2000;
+      } else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }
+    }
+    if(my>240 && my<270){ // invuln
+      if(spaceCoins>=20000){
+        spaceCoins-=20000; saveSpaceCoins();
+        invulnerable=true; invulnTimer=Date.now(); shopMessage="Invulnérabilité activée !"; shopMessageTimer=Date.now()+2000;
+      } else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }
+    }
+    if(my>280 && my<310){ // mitraillette
+      if(spaceCoins>=15000){
+        spaceCoins-=15000; saveSpaceCoins();
+        fireDelay /= 2;
+        setTimeout(()=> fireDelay *=2, 60000); // 1 minute
+        shopMessage="Mitraillette activée !"; shopMessageTimer=Date.now()+2000;
+      } else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }
+    }
+  }
+});
+
+setInterval(update,1000/60);
 </script>
 </body>
 </html>
