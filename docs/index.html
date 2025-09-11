@@ -1,24 +1,28 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Space Invaders Triangles</title>
-<style>
-body { background:black; margin:0; overflow:hidden; }
-canvas { background:black; display:block; margin:0 auto; }
-#touchControls { position:fixed; bottom:20px; left:20px; }
-.btn {
-  background:grey; color:white; padding:15px; margin:5px;
-  border-radius:10px; font-size:20px; user-select:none;
-  display:inline-block; text-align:center;
-}
-#difficultyMenu { position:fixed; top:20px; right:20px; background:#222; color:white; padding:10px; border-radius:10px; }
-.diffBtn { margin:5px; padding:5px 10px; cursor:pointer; background:grey; border-radius:5px; display:inline-block; }
-</style>
+  <meta charset="UTF-8">
+  <title>Space Invaders Triangles</title>
+  <style>
+    body { background:black; margin:0; overflow:hidden; }
+    canvas { background:black; display:block; margin:0 auto; }
+    #touchControls { position:fixed; bottom:20px; left:20px; z-index:100; }
+    .btn {
+      background:grey; color:white; padding:15px; margin:5px;
+      border-radius:10px; font-size:20px; user-select:none;
+      display:inline-block; text-align:center;
+    }
+    #devLogin {
+      display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.8); color:white; text-align:center; padding-top:200px;
+      z-index:9999;
+    }
+    #devLogin input { font-size:20px; padding:10px; }
+    #devLogin button { font-size:20px; padding:10px; margin-left:10px; }
+  </style>
 </head>
 <body>
 <canvas id="gameCanvas" width="800" height="600"></canvas>
-
 <div id="touchControls">
   <div class="btn" id="leftBtn">◀</div>
   <div class="btn" id="rightBtn">▶</div>
@@ -26,12 +30,16 @@ canvas { background:black; display:block; margin:0 auto; }
   <div class="btn" id="shopBtn">🛒</div>
   <div class="btn" id="pauseBtn">⏸</div>
   <div class="btn" id="restartBtn">🔄</div>
+  <div class="btn" id="difficultyBtn">⚙️</div>
+  <div class="btn" id="devBtn">🔑</div>
 </div>
 
-<div id="difficultyMenu">
-  <div class="diffBtn" data-diff="Facile">Facile</div>
-  <div class="diffBtn" data-diff="Moyen">Moyen</div>
-  <div class="diffBtn" data-diff="Difficile">Difficile</div>
+<!-- Login Dev -->
+<div id="devLogin">
+  <h2>Connexion Développeur</h2>
+  <input type="password" id="devPassword" placeholder="Mot de passe">
+  <button id="devSubmit">Connexion</button>
+  <button id="devCancel">Annuler</button>
 </div>
 
 <script>
@@ -39,7 +47,7 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 let playerX = canvas.width/2, playerY = canvas.height-60;
-let playerSize = 15, playerSpeed = 5;
+const playerSize = 15; let playerSpeed = 5;
 let lives = 3, invulnerable = false, invulnTimer = 0, infiniteInvuln = false;
 
 let bullets = [], enemies = [], score = 0;
@@ -49,72 +57,97 @@ let shopOpen = false, pause = false, gameOver = false;
 let shopMessage = "", shopMessageTimer = 0;
 
 let keys = {};
+let difficulty = "Moyen";
+let enemySpawnInterval = null;
+let isDev = localStorage.getItem("isDev") === "true";
+let infiniteCoins = false;
+
+// === Touches ===
 document.addEventListener("keydown", e => keys[e.key] = true);
 document.addEventListener("keyup", e => keys[e.key] = false);
 
-// Touch buttons
+// === Touches tactiles ===
 document.getElementById("leftBtn").addEventListener("touchstart", ()=> keys["ArrowLeft"]=true);
 document.getElementById("leftBtn").addEventListener("touchend", ()=> keys["ArrowLeft"]=false);
 document.getElementById("rightBtn").addEventListener("touchstart", ()=> keys["ArrowRight"]=true);
 document.getElementById("rightBtn").addEventListener("touchend", ()=> keys["ArrowRight"]=false);
-document.getElementById("shootBtn").addEventListener("touchstart", ()=> keys[" "] = true);
-document.getElementById("shootBtn").addEventListener("touchend", ()=> keys[" "] = false);
+document.getElementById("shootBtn").addEventListener("touchstart", ()=> keys[" "]=true);
+document.getElementById("shootBtn").addEventListener("touchend", ()=> keys[" "]=false);
 document.getElementById("shopBtn").addEventListener("click", ()=> shopOpen=!shopOpen);
 document.getElementById("pauseBtn").addEventListener("click", ()=> pause=!pause);
 document.getElementById("restartBtn").addEventListener("click", restartGame);
-
-function saveSpaceCoins(){ localStorage.setItem("spaceCoins", spaceCoins); }
-
-// Cheats console
-window.gameVars = {
-  spaceCoins: ()=>spaceCoins,
-  setSpaceCoins: v=>{ spaceCoins=v; saveSpaceCoins(); },
-  score: ()=>score,
-  setScore: v=>score=v,
-  lives: ()=>lives,
-  setLives: v=>lives=v,
-  invulnerable: ()=>invulnerable,
-  setInvulnerable: v=>invulnerable=v,
-  infiniteInvuln: ()=>infiniteInvuln,
-  setInfiniteInvuln: v=>infiniteInvuln=v
-};
-
-// === Difficulty ===
-let difficulty = "Facile";
-let enemyBaseSpeed = 2;
-const diffButtons = document.querySelectorAll(".diffBtn");
-diffButtons.forEach(btn=>{
-  btn.addEventListener("click", ()=>{
-    difficulty = btn.dataset.diff;
-    enemyBaseSpeed = difficulty==="Facile"?2:difficulty==="Moyen"?3:4;
-    startEnemySpawn();
-  });
+document.getElementById("difficultyBtn").addEventListener("click", ()=>{
+  let choice = prompt("Choisis la difficulté :\n1. Facile\n2. Moyen\n3. Difficile");
+  if(choice==="1") setDifficulty("Facile");
+  if(choice==="2") setDifficulty("Moyen");
+  if(choice==="3") setDifficulty("Difficile");
 });
 
-// === Enemies spawn ===
-let enemySpawnInterval = null;
-function startEnemySpawn(){
-  if(enemySpawnInterval) clearInterval(enemySpawnInterval);
-  let spawnDelay = 250;
-  if(difficulty==="Moyen") spawnDelay=100;
-  if(difficulty==="Difficile") spawnDelay=35;
+// === Dev Button ===
+document.getElementById("devBtn").addEventListener("click", ()=> {
+  document.getElementById("devLogin").style.display="block";
+});
 
-  enemySpawnInterval = setInterval(()=>{
-    if(!shopOpen && !pause && !gameOver){
-      enemies.push({x:Math.random()*canvas.width, y:0, speed: enemyBaseSpeed+Math.random()*2, special: false});
-    }
-  }, spawnDelay);
+// === Dev Login ===
+document.getElementById("devSubmit").addEventListener("click", ()=> {
+  let pwd = document.getElementById("devPassword").value;
+  if(pwd==="minaminxrouge%DEV08"){
+    isDev = true;
+    localStorage.setItem("isDev", "true");
+    alert("Connecté en mode développeur !");
+    document.getElementById("devLogin").style.display="none";
+    document.getElementById("devPassword").value = "";
+  } else {
+    alert("Mot de passe incorrect");
+  }
+});
+
+// === Dev Cancel ===
+document.getElementById("devCancel").addEventListener("click", () => {
+  document.getElementById("devLogin").style.display = "none";
+  document.getElementById("devPassword").value = "";
+});
+
+// === Dev Login click outside to close ===
+document.getElementById("devLogin").addEventListener("click", e => {
+  if(e.target === document.getElementById("devLogin")){
+    document.getElementById("devLogin").style.display = "none";
+    document.getElementById("devPassword").value = "";
+  }
+});
+
+// === Dev Menu ===
+function devMenu(){
+  let choice = prompt("Menu Dev:\n1. +1000 SC\n2. +10 vies\n3. Reset score\n4. Déconnexion\n5. SpaceCoins infinis ON/OFF");
+  if(choice==="1"){ spaceCoins += 1000; saveSpaceCoins(); }
+  if(choice==="2"){ lives += 10; }
+  if(choice==="3"){ score = 0; }
+  if(choice==="4"){ isDev=false; localStorage.removeItem("isDev"); alert("Déconnecté du mode dev."); }
+  if(choice==="5"){ infiniteCoins = !infiniteCoins; alert("SpaceCoins infinis "+(infiniteCoins?"activés":"désactivés")); }
 }
-startEnemySpawn();
 
-// === Restart ===
+// === Difficultés ===
+function setDifficulty(level){
+  difficulty = level;
+  if(enemySpawnInterval) clearInterval(enemySpawnInterval);
+  let rate = 100;
+  if(level==="Facile") rate = 250;
+  if(level==="Moyen") rate = 100;
+  if(level==="Difficile") rate = 35;
+  enemySpawnInterval = setInterval(()=> {
+    if(!shopOpen && !pause && !gameOver){
+      enemies.push({ x: Math.random()*canvas.width, y:0, speed:2+Math.random()*3, special:false });
+    }
+  },rate);
+}
+setDifficulty("Moyen");
+
 function restartGame(){
   playerX = canvas.width/2; playerY = canvas.height-60;
   lives = 3; bullets = []; enemies = [];
   score = 0; invulnerable = false; invulnTimer = 0; gameOver = false;
 }
 
-// === Draw functions ===
 function drawPlayer(){
   ctx.fillStyle="white";
   ctx.beginPath();
@@ -125,16 +158,8 @@ function drawPlayer(){
   ctx.fill();
 }
 
-function getRainbowColor(){
-    const t = Date.now()/100;
-    const r = Math.floor(Math.sin(t)*127 + 128);
-    const g = Math.floor(Math.sin(t+2)*127 + 128);
-    const b = Math.floor(Math.sin(t+4)*127 + 128);
-    return `rgb(${r},${g},${b})`;
-}
-
 function drawEnemy(e){
-  ctx.fillStyle = e.special ? getRainbowColor() : "red";
+  ctx.fillStyle = e.special ? "gold" : "red";
   ctx.beginPath();
   ctx.moveTo(e.x, e.y-15);
   ctx.lineTo(e.x-15, e.y+15);
@@ -154,41 +179,10 @@ function drawText(t,x,y,s=30,c="white"){
   ctx.fillStyle=c; ctx.font=s+"px Arial"; ctx.fillText(t,x,y);
 }
 
-// === Easter Egg ===
-const konamiSequence = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","a","b","Enter"];
-let konamiIndex = 0;
-let easterEggActive = false;
-let easterEggDurationEnd = 0;
-let easterEggCooldownEnd = parseInt(localStorage.getItem("easterEggCooldownEnd")) || 0;
-
-document.addEventListener("keydown", e=>{
-    const storedCooldown = parseInt(localStorage.getItem("easterEggCooldownEnd")) || 0;
-    if(Date.now() < storedCooldown) return;
-
-    if(e.key === konamiSequence[konamiIndex]){
-        konamiIndex++;
-        if(konamiIndex === konamiSequence.length){
-            easterEggActive = true;
-            easterEggDurationEnd = Date.now() + 60000; // 1 minute
-            const cooldown = Date.now() + 10*60*1000; // 10 min
-            localStorage.setItem("easterEggCooldownEnd", cooldown);
-            konamiIndex = 0;
-        }
-    } else konamiIndex = 0;
-});
-
-function updateEasterEgg(){
-    if(easterEggActive && Date.now() > easterEggDurationEnd){
-        easterEggActive = false;
-    }
-}
-
-// === Update ===
 function update(){
   if(pause || gameOver){ drawUI(); return; }
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Déplacements
   if(keys["ArrowLeft"] && playerX-playerSize>0) playerX-=playerSpeed;
   if(keys["ArrowRight"] && playerX+playerSize<canvas.width) playerX+=playerSpeed;
   if(keys[" "] && Date.now()-lastShot>fireDelay){
@@ -196,21 +190,12 @@ function update(){
     lastShot=Date.now();
   }
 
-  // Bullets
   bullets.forEach(b=> b.y-=7);
   bullets = bullets.filter(b=> b.y>0);
 
-  // Ennemis
   enemies.forEach(e=> e.y+=e.speed);
   enemies = enemies.filter(e=> e.y<canvas.height);
 
-  // Easter Egg - all enemies special
-  updateEasterEgg();
-  if(easterEggActive){
-    enemies.forEach(e=> e.special = true);
-  }
-
-  // Collisions
   bullets.forEach((b,bi)=>{
     enemies.forEach((e,ei)=>{
       if(Math.abs(b.x-e.x)<20 && Math.abs(b.y-e.y)<20){
@@ -234,19 +219,22 @@ function update(){
   if(invulnerable && Date.now()-invulnTimer>2000) invulnerable=false;
   if(lives<=0) gameOver=true;
 
-  // Dessin
   drawPlayer();
   enemies.forEach(drawEnemy);
   bullets.forEach(drawBullet);
 
   drawText("Score: "+score,10,30);
-  drawText("SpaceCoins: "+spaceCoins,10,60);
+  drawText("SpaceCoins: "+(infiniteCoins?"∞":spaceCoins),10,60);
   drawText("Vies: "+lives,10,90);
+  drawText("Difficulté: "+difficulty,10,120);
+
+  if(isDev){
+    drawText("[DEV MODE] Clique sur 🔑 pour options",canvas.width-400,30,20,"yellow");
+  }
 
   drawUI();
 }
 
-// === UI ===
 function drawUI(){
   if(shopOpen){
     ctx.fillStyle="purple"; ctx.fillRect(100,100,600,400);
@@ -254,9 +242,9 @@ function drawUI(){
     drawText("1) Speed x2 (10000 SC)",200,220,25);
     drawText("2) Invulnérabilité 1min (20000 SC)",200,260,25);
     drawText("3) Mitraillette 1min (15000 SC)",200,300,25);
-    drawText("Tes SC: "+spaceCoins,200,360,25);
+    drawText("Tes SC: "+(infiniteCoins?"∞":spaceCoins),200,340,25);
     if(shopMessage && Date.now()<shopMessageTimer){
-      drawText(shopMessage,200,400,25,"red");
+      drawText(shopMessage,200,380,25,"red");
     }
   }
   if(pause){
@@ -268,34 +256,24 @@ function drawUI(){
   }
 }
 
-// === Shop click ===
+setInterval(update,1000/60);
+
 canvas.addEventListener("click",e=>{
   if(shopOpen){
     const mx=e.offsetX,my=e.offsetY;
-    if(my>200 && my<230){ // speed
-      if(spaceCoins>=10000){
-        spaceCoins-=10000; saveSpaceCoins();
-        playerSpeed*=2; shopMessage="Vitesse augmentée !"; shopMessageTimer=Date.now()+2000;
-      } else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }
-    }
-    if(my>240 && my<270){ // invuln
-      if(spaceCoins>=20000){
-        spaceCoins-=20000; saveSpaceCoins();
-        invulnerable=true; invulnTimer=Date.now(); shopMessage="Invulnérabilité activée !"; shopMessageTimer=Date.now()+2000;
-      } else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }
-    }
-    if(my>280 && my<310){ // mitraillette
-      if(spaceCoins>=15000){
-        spaceCoins-=15000; saveSpaceCoins();
-        fireDelay /= 2;
-        setTimeout(()=> fireDelay *=2, 60000); // 1 minute
-        shopMessage="Mitraillette activée !"; shopMessageTimer=Date.now()+2000;
-      } else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }
-    }
+    if(my>200 && my<230){ if(spaceCoins>=10000 || infiniteCoins){ if(!infiniteCoins){ spaceCoins-=10000; saveSpaceCoins(); } playerSpeed*=2; shopMessage="Vitesse augmentée !"; shopMessageTimer=Date.now()+2000;} else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }}
+    if(my>240 && my<270){ if(spaceCoins>=20000 || infiniteCoins){ if(!infiniteCoins){ spaceCoins-=20000; saveSpaceCoins(); } invulnerable=true; invulnTimer=Date.now(); shopMessage="Invulnérabilité activée !"; shopMessageTimer=Date.now()+2000; setTimeout(()=> invulnerable=false,60000);} else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }}
+    if(my>280 && my<310){ if(spaceCoins>=15000 || infiniteCoins){ if(!infiniteCoins){ spaceCoins-=15000; saveSpaceCoins(); } fireDelay=100; shopMessage="Mitraillette activée !"; shopMessageTimer=Date.now()+2000; setTimeout(()=>fireDelay=300,60000);} else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }}
   }
 });
 
-setInterval(update,1000/60);
+// Shortcut dev menu
+window.addEventListener("keydown", e=>{
+  if(isDev && e.key==="F10") devMenu();
+});
+
+// Save SpaceCoins
+function saveSpaceCoins(){ localStorage.setItem("spaceCoins", spaceCoins); }
 </script>
 </body>
 </html>
