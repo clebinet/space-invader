@@ -62,6 +62,12 @@ let enemySpawnInterval = null;
 let isDev = localStorage.getItem("isDev") === "true";
 let infiniteCoins = false;
 
+// === Admin Abuse Secret Event ===
+let secretEvent = false;
+let secretEventEnd = 0;
+let rainbowHue = 0;
+let lastAdminAbuse = parseInt(localStorage.getItem("lastAdminAbuse") || "0");
+
 // === Touches ===
 document.addEventListener("keydown", e => keys[e.key] = true);
 document.addEventListener("keyup", e => keys[e.key] = false);
@@ -84,46 +90,46 @@ document.getElementById("difficultyBtn").addEventListener("click", ()=>{
 });
 
 // === Dev Button ===
-document.getElementById("devBtn").addEventListener("click", ()=> {
+document.getElementById("devBtn").addEventListener("click", ()=>{
   document.getElementById("devLogin").style.display="block";
 });
+document.getElementById("devCancel").addEventListener("click", ()=>{
+  document.getElementById("devLogin").style.display="none";
+});
 
-// === Dev Login ===
-document.getElementById("devSubmit").addEventListener("click", ()=> {
+// === Dev Login corrigé ===
+document.getElementById("devSubmit").addEventListener("click", ()=>{
   let pwd = document.getElementById("devPassword").value;
-  if(pwd==="minaminxrouge%DEV08"){
+  
+  if(pwd === "minaminxrouge%DEV08"){
     isDev = true;
     localStorage.setItem("isDev", "true");
     alert("Connecté en mode développeur !");
-    document.getElementById("devLogin").style.display="none";
-    document.getElementById("devPassword").value = "";
-  } else {
+  } 
+  else if(pwd === "adminabuse"){
+    tryAdminAbuse();
+  } 
+  else {
     alert("Mot de passe incorrect");
   }
-});
 
-// === Dev Cancel ===
-document.getElementById("devCancel").addEventListener("click", () => {
-  document.getElementById("devLogin").style.display = "none";
+  document.getElementById("devLogin").style.display="none";
   document.getElementById("devPassword").value = "";
 });
 
-// === Dev Login click outside to close ===
-document.getElementById("devLogin").addEventListener("click", e => {
-  if(e.target === document.getElementById("devLogin")){
-    document.getElementById("devLogin").style.display = "none";
-    document.getElementById("devPassword").value = "";
+// === Secret Event function ===
+function tryAdminAbuse(){
+  const now = Date.now();
+  if(now - lastAdminAbuse < 24*60*60*1000){
+    let hoursLeft = Math.ceil((24*60*60*1000 - (now-lastAdminAbuse))/3600000);
+    alert("Tu dois attendre encore " + hoursLeft + "h avant de refaire l'Admin Abuse !");
+    return;
   }
-});
-
-// === Dev Menu ===
-function devMenu(){
-  let choice = prompt("Menu Dev:\n1. +1000 SC\n2. +10 vies\n3. Reset score\n4. Déconnexion\n5. SpaceCoins infinis ON/OFF");
-  if(choice==="1"){ spaceCoins += 1000; saveSpaceCoins(); }
-  if(choice==="2"){ lives += 10; }
-  if(choice==="3"){ score = 0; }
-  if(choice==="4"){ isDev=false; localStorage.removeItem("isDev"); alert("Déconnecté du mode dev."); }
-  if(choice==="5"){ infiniteCoins = !infiniteCoins; alert("SpaceCoins infinis "+(infiniteCoins?"activés":"désactivés")); }
+  alert("🔥 ADMIN ABUSE ACTIVÉ ! 🔥");
+  secretEvent = true;
+  secretEventEnd = now + 5*60*1000; // 5 minutes
+  lastAdminAbuse = now;
+  localStorage.setItem("lastAdminAbuse", lastAdminAbuse.toString());
 }
 
 // === Difficultés ===
@@ -134,9 +140,15 @@ function setDifficulty(level){
   if(level==="Facile") rate = 250;
   if(level==="Moyen") rate = 100;
   if(level==="Difficile") rate = 35;
-  enemySpawnInterval = setInterval(()=> {
+  enemySpawnInterval = setInterval(()=>{
     if(!shopOpen && !pause && !gameOver){
-      enemies.push({ x: Math.random()*canvas.width, y:0, speed:2+Math.random()*3, special:false });
+      enemies.push({
+        x: Math.random()*canvas.width,
+        y: 0,
+        speed: 2+Math.random()*3,
+        special: false,
+        rainbow: secretEvent
+      });
     }
   },rate);
 }
@@ -159,7 +171,11 @@ function drawPlayer(){
 }
 
 function drawEnemy(e){
-  ctx.fillStyle = e.special ? "gold" : "red";
+  if(e.rainbow){
+    ctx.fillStyle = `hsl(${rainbowHue},100%,50%)`;
+  } else {
+    ctx.fillStyle = e.special ? "gold" : "red";
+  }
   ctx.beginPath();
   ctx.moveTo(e.x, e.y-15);
   ctx.lineTo(e.x-15, e.y+15);
@@ -181,7 +197,18 @@ function drawText(t,x,y,s=30,c="white"){
 
 function update(){
   if(pause || gameOver){ drawUI(); return; }
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Effet fond arc-en-ciel pendant admin abuse
+  if(secretEvent){
+    rainbowHue = (rainbowHue+2)%360;
+    ctx.fillStyle = `hsl(${rainbowHue},100%,20%)`;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    if(Date.now()>secretEventEnd){
+      secretEvent=false;
+    }
+  } else {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  }
 
   if(keys["ArrowLeft"] && playerX-playerSize>0) playerX-=playerSpeed;
   if(keys["ArrowRight"] && playerX+playerSize<canvas.width) playerX+=playerSpeed;
@@ -201,7 +228,11 @@ function update(){
       if(Math.abs(b.x-e.x)<20 && Math.abs(b.y-e.y)<20){
         enemies.splice(ei,1); bullets.splice(bi,1);
         score+=10;
-        spaceCoins += e.special ? 2 : 1;
+        if(e.rainbow){
+          spaceCoins+=5;
+        } else {
+          spaceCoins += e.special ? 2 : 1;
+        }
         saveSpaceCoins();
       }
     });
@@ -232,6 +263,10 @@ function update(){
     drawText("[DEV MODE] Clique sur 🔑 pour options",canvas.width-400,30,20,"yellow");
   }
 
+  if(secretEvent){
+    drawText("🔥 ADMIN ABUSE EN COURS 🔥",canvas.width/2-200,50,30,"cyan");
+  }
+
   drawUI();
 }
 
@@ -256,24 +291,11 @@ function drawUI(){
   }
 }
 
+function saveSpaceCoins(){
+  localStorage.setItem("spaceCoins",spaceCoins.toString());
+}
+
 setInterval(update,1000/60);
-
-canvas.addEventListener("click",e=>{
-  if(shopOpen){
-    const mx=e.offsetX,my=e.offsetY;
-    if(my>200 && my<230){ if(spaceCoins>=10000 || infiniteCoins){ if(!infiniteCoins){ spaceCoins-=10000; saveSpaceCoins(); } playerSpeed*=2; shopMessage="Vitesse augmentée !"; shopMessageTimer=Date.now()+2000;} else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }}
-    if(my>240 && my<270){ if(spaceCoins>=20000 || infiniteCoins){ if(!infiniteCoins){ spaceCoins-=20000; saveSpaceCoins(); } invulnerable=true; invulnTimer=Date.now(); shopMessage="Invulnérabilité activée !"; shopMessageTimer=Date.now()+2000; setTimeout(()=> invulnerable=false,60000);} else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }}
-    if(my>280 && my<310){ if(spaceCoins>=15000 || infiniteCoins){ if(!infiniteCoins){ spaceCoins-=15000; saveSpaceCoins(); } fireDelay=100; shopMessage="Mitraillette activée !"; shopMessageTimer=Date.now()+2000; setTimeout(()=>fireDelay=300,60000);} else { shopMessage="Pas assez de SC !"; shopMessageTimer=Date.now()+2000; }}
-  }
-});
-
-// Shortcut dev menu
-window.addEventListener("keydown", e=>{
-  if(isDev && e.key==="F10") devMenu();
-});
-
-// Save SpaceCoins
-function saveSpaceCoins(){ localStorage.setItem("spaceCoins", spaceCoins); }
 </script>
 </body>
 </html>
