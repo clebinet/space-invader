@@ -34,7 +34,6 @@
   <div class="btn" id="devBtn">🔑</div>
 </div>
 
-<!-- Login Dev -->
 <div id="devLogin">
   <h2>Connexion Développeur</h2>
   <input type="password" id="devPassword" placeholder="Mot de passe">
@@ -55,6 +54,53 @@ let spaceCoins = parseInt(localStorage.getItem("spaceCoins") || "0");
 let lastShot = 0, fireDelay = 300;
 let shopOpen = false, pause = false, gameOver = false;
 let shopMessage = "", shopMessageTimer = 0;
+let shopTab = "items";
+let devMenuOpen = false;
+
+// === COSMÉTIQUES ===
+let cosmetics = {
+  player: JSON.parse(localStorage.getItem("cosmeticPlayer") || '{"type":"classic","color":"white"}'),
+  bullet: JSON.parse(localStorage.getItem("cosmeticBullet") || '{"type":"classic","color":"lime"}'),
+  enemy: JSON.parse(localStorage.getItem("cosmeticEnemy") || '{"type":"classic","color":"red"}'),
+  ui: JSON.parse(localStorage.getItem("cosmeticUI") || '{"theme":"classic"}')
+};
+
+let ownedCosmetics = JSON.parse(localStorage.getItem("ownedCosmetics") || '{"player":["classic"],"bullet":["classic"],"enemy":["classic"],"ui":["classic"]}');
+
+const cosmeticShop = {
+  player: [
+    {key:"4", name:"Neon", type:"neon", color:"cyan", price:50000},
+    {key:"5", name:"Rainbow", type:"rainbow", color:"", price:100000},
+    {key:"6", name:"Gold", type:"gold", color:"gold", price:150000},
+    {key:"7", name:"Diamond", type:"diamond", color:"", price:250000},
+    {key:"8", name:"Fire", type:"fire", color:"", price:300000},
+    {key:"9", name:"Ghost", type:"ghost", color:"", price:500000},
+    {key:"0", name:"Toxic", type:"toxic", color:"lime", price:750000},
+    {key:"q", name:"Galaxy", type:"galaxy", color:"purple", price:1000000}
+  ],
+  bullet: [
+    {key:"a", name:"Laser", type:"laser", color:"red", price:80000},
+    {key:"z", name:"Plasma", type:"plasma", color:"cyan", price:120000},
+    {key:"e", name:"Rocket", type:"rocket", color:"orange", price:200000},
+    {key:"r", name:"Star", type:"star", color:"yellow", price:350000},
+    {key:"t", name:"Lightning", type:"lightning", color:"yellow", price:600000}
+  ],
+  enemy: [
+    {key:"y", name:"Ice", type:"ice", color:"cyan", price:100000},
+    {key:"u", name:"Lava", type:"lava", color:"orange", price:180000},
+    {key:"i", name:"Crystal", type:"crystal", color:"purple", price:280000},
+    {key:"o", name:"Shadow", type:"shadow", color:"grey", price:450000},
+    {key:"p", name:"Alien", type:"alien", color:"green", price:800000}
+  ],
+  ui: [
+    {key:"s", name:"Dark", theme:"dark", price:70000},
+    {key:"d", name:"Neon", theme:"neon", price:150000},
+    {key:"f", name:"Gold", theme:"gold", price:250000},
+    {key:"g", name:"Cyber", theme:"cyber", price:400000},
+    {key:"h", name:"Candy", theme:"candy", price:650000},
+    {key:"j", name:"Matrix", theme:"matrix", price:900000}
+  ]
+};
 
 let keys = {};
 let difficulty = "Moyen";
@@ -62,24 +108,104 @@ let enemySpawnInterval = null;
 let isDev = localStorage.getItem("isDev") === "true";
 let infiniteCoins = false;
 
-// === Admin Abuse Secret Event ===
 let secretEvent = false;
 let secretEventEnd = 0;
 let rainbowHue = 0;
 let lastAdminAbuse = parseInt(localStorage.getItem("lastAdminAbuse") || "0");
 
-// === Touches ===
-document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  
+  // Dev Menu avec touche K
+  if(e.key === "k" && isDev){
+    devMenuOpen = !devMenuOpen;
+  }
+  
+  // Dev Menu actions
+  if(devMenuOpen && isDev){
+    if(e.key === "1"){
+      infiniteCoins = !infiniteCoins;
+      showShopMessage(infiniteCoins ? "✓ Coins infinis activés" : "✗ Coins infinis désactivés");
+    }
+    if(e.key === "2"){
+      infiniteInvuln = !infiniteInvuln;
+      showShopMessage(infiniteInvuln ? "✓ Invulnérabilité activée" : "✗ Invulnérabilité désactivée");
+    }
+    if(e.key === "3"){
+      spaceCoins += 100000;
+      saveSpaceCoins();
+      showShopMessage("✓ +100k SpaceCoins !");
+    }
+    if(e.key === "4"){
+      lives = 999;
+      showShopMessage("✓ 999 vies !");
+    }
+    if(e.key === "5"){
+      // Débloquer tous les cosmétiques
+      ownedCosmetics.player = ["classic","neon","rainbow","gold","diamond","fire","ghost","toxic","galaxy"];
+      ownedCosmetics.bullet = ["classic","laser","plasma","rocket","star","lightning"];
+      ownedCosmetics.enemy = ["classic","ice","lava","crystal","shadow","alien"];
+      ownedCosmetics.ui = ["classic","dark","neon","gold","cyber","candy","matrix"];
+      localStorage.setItem("ownedCosmetics", JSON.stringify(ownedCosmetics));
+      showShopMessage("✓ Tous les cosmétiques débloqués !");
+    }
+    if(e.key === "6"){
+      playerSpeed = 15;
+      showShopMessage("✓ Vitesse MAX !");
+    }
+    if(e.key === "7"){
+      fireDelay = 50;
+      showShopMessage("✓ Tir ultra-rapide !");
+    }
+  }
+  
+  if(shopOpen && shopTab === "cosmetics"){
+    handleCosmeticPurchase(e.key);
+  }
+  
+  if(shopOpen && shopTab === "items"){
+    if(e.key === "1"){
+      buyItem("speed", 10000, ()=> playerSpeed*=2);
+    } else if(e.key === "2"){
+      buyItem("invuln", 20000, ()=> {
+        infiniteInvuln = true;
+        setTimeout(()=> infiniteInvuln=false, 60000);
+      });
+    } else if(e.key === "3"){
+      buyItem("rapid", 15000, ()=> {
+        let old = fireDelay;
+        fireDelay = 100;
+        setTimeout(()=> fireDelay=old, 60000);
+      });
+    }
+  }
+});
+
 document.addEventListener("keyup", e => keys[e.key] = false);
 
-// === Touches tactiles ===
 document.getElementById("leftBtn").addEventListener("touchstart", ()=> keys["ArrowLeft"]=true);
 document.getElementById("leftBtn").addEventListener("touchend", ()=> keys["ArrowLeft"]=false);
 document.getElementById("rightBtn").addEventListener("touchstart", ()=> keys["ArrowRight"]=true);
 document.getElementById("rightBtn").addEventListener("touchend", ()=> keys["ArrowRight"]=false);
 document.getElementById("shootBtn").addEventListener("touchstart", ()=> keys[" "]=true);
 document.getElementById("shootBtn").addEventListener("touchend", ()=> keys[" "]=false);
-document.getElementById("shopBtn").addEventListener("click", ()=> shopOpen=!shopOpen);
+document.getElementById("shopBtn").addEventListener("click", ()=> {
+  shopOpen=!shopOpen;
+  shopTab = "items";
+});
+
+// Clic sur le canvas pour changer d'onglet
+canvas.addEventListener("click", (e)=>{
+  if(!shopOpen) return;
+  let rect = canvas.getBoundingClientRect();
+  let x = e.clientX - rect.left;
+  let y = e.clientY - rect.top;
+  
+  if(y>=60 && y<=100){
+    if(x>=60 && x<=210) shopTab = "items";
+    if(x>=220 && x<=370) shopTab = "cosmetics";
+  }
+});
 document.getElementById("pauseBtn").addEventListener("click", ()=> pause=!pause);
 document.getElementById("restartBtn").addEventListener("click", restartGame);
 document.getElementById("difficultyBtn").addEventListener("click", ()=>{
@@ -89,7 +215,6 @@ document.getElementById("difficultyBtn").addEventListener("click", ()=>{
   if(choice==="3") setDifficulty("Difficile");
 });
 
-// === Dev Button ===
 document.getElementById("devBtn").addEventListener("click", ()=>{
   document.getElementById("devLogin").style.display="block";
 });
@@ -97,7 +222,6 @@ document.getElementById("devCancel").addEventListener("click", ()=>{
   document.getElementById("devLogin").style.display="none";
 });
 
-// === Dev Login corrigé ===
 document.getElementById("devSubmit").addEventListener("click", ()=>{
   let pwd = document.getElementById("devPassword").value;
   
@@ -117,7 +241,6 @@ document.getElementById("devSubmit").addEventListener("click", ()=>{
   document.getElementById("devPassword").value = "";
 });
 
-// === Secret Event function ===
 function tryAdminAbuse(){
   const now = Date.now();
   if(now - lastAdminAbuse < 24*60*60*1000){
@@ -127,12 +250,120 @@ function tryAdminAbuse(){
   }
   alert("🔥 ADMIN ABUSE ACTIVÉ ! 🔥");
   secretEvent = true;
-  secretEventEnd = now + 5*60*1000; // 5 minutes
+  secretEventEnd = now + 5*60*1000;
   lastAdminAbuse = now;
   localStorage.setItem("lastAdminAbuse", lastAdminAbuse.toString());
 }
 
-// === Difficultés ===
+function handleCosmeticPurchase(key){
+  let found = false;
+  
+  for(let item of cosmeticShop.player){
+    if(item.key === key){
+      found = true;
+      if(ownedCosmetics.player.includes(item.type)){
+        cosmetics.player = {type: item.type, color: item.color};
+        localStorage.setItem("cosmeticPlayer", JSON.stringify(cosmetics.player));
+        showShopMessage("✓ " + item.name + " équipé !");
+      } else if(infiniteCoins || spaceCoins >= item.price){
+        if(!infiniteCoins) spaceCoins -= item.price;
+        ownedCosmetics.player.push(item.type);
+        cosmetics.player = {type: item.type, color: item.color};
+        saveCosmetics();
+        showShopMessage("✓ " + item.name + " acheté et équipé !");
+      } else {
+        showShopMessage("✗ Pas assez de SC !");
+      }
+    }
+  }
+  
+  for(let item of cosmeticShop.bullet){
+    if(item.key === key){
+      found = true;
+      if(ownedCosmetics.bullet.includes(item.type)){
+        cosmetics.bullet = {type: item.type, color: item.color};
+        localStorage.setItem("cosmeticBullet", JSON.stringify(cosmetics.bullet));
+        showShopMessage("✓ " + item.name + " équipé !");
+      } else if(infiniteCoins || spaceCoins >= item.price){
+        if(!infiniteCoins) spaceCoins -= item.price;
+        ownedCosmetics.bullet.push(item.type);
+        cosmetics.bullet = {type: item.type, color: item.color};
+        saveCosmetics();
+        showShopMessage("✓ " + item.name + " acheté et équipé !");
+      } else {
+        showShopMessage("✗ Pas assez de SC !");
+      }
+    }
+  }
+  
+  for(let item of cosmeticShop.enemy){
+    if(item.key === key){
+      found = true;
+      if(ownedCosmetics.enemy.includes(item.type)){
+        cosmetics.enemy = {type: item.type, color: item.color};
+        localStorage.setItem("cosmeticEnemy", JSON.stringify(cosmetics.enemy));
+        showShopMessage("✓ " + item.name + " équipé !");
+      } else if(infiniteCoins || spaceCoins >= item.price){
+        if(!infiniteCoins) spaceCoins -= item.price;
+        ownedCosmetics.enemy.push(item.type);
+        cosmetics.enemy = {type: item.type, color: item.color};
+        saveCosmetics();
+        showShopMessage("✓ " + item.name + " acheté et équipé !");
+      } else {
+        showShopMessage("✗ Pas assez de SC !");
+      }
+    }
+  }
+  
+  for(let item of cosmeticShop.ui){
+    if(item.key === key){
+      found = true;
+      if(ownedCosmetics.ui.includes(item.theme)){
+        cosmetics.ui = {theme: item.theme};
+        localStorage.setItem("cosmeticUI", JSON.stringify(cosmetics.ui));
+        showShopMessage("✓ " + item.name + " équipé !");
+      } else if(infiniteCoins || spaceCoins >= item.price){
+        if(!infiniteCoins) spaceCoins -= item.price;
+        ownedCosmetics.ui.push(item.theme);
+        cosmetics.ui = {theme: item.theme};
+        saveCosmetics();
+        showShopMessage("✓ " + item.name + " acheté et équipé !");
+      } else {
+        showShopMessage("✗ Pas assez de SC !");
+      }
+    }
+  }
+  
+  if(key === "Tab" || key === "ArrowRight"){
+    shopTab = shopTab === "items" ? "cosmetics" : "items";
+  }
+}
+
+function buyItem(name, price, effect){
+  if(infiniteCoins || spaceCoins >= price){
+    if(!infiniteCoins) spaceCoins -= price;
+    saveSpaceCoins();
+    effect();
+    showShopMessage("✓ Item acheté !");
+  } else {
+    showShopMessage("✗ Pas assez de SC !");
+  }
+}
+
+function showShopMessage(msg){
+  shopMessage = msg;
+  shopMessageTimer = Date.now() + 2000;
+}
+
+function saveCosmetics(){
+  localStorage.setItem("cosmeticPlayer", JSON.stringify(cosmetics.player));
+  localStorage.setItem("cosmeticBullet", JSON.stringify(cosmetics.bullet));
+  localStorage.setItem("cosmeticEnemy", JSON.stringify(cosmetics.enemy));
+  localStorage.setItem("cosmeticUI", JSON.stringify(cosmetics.ui));
+  localStorage.setItem("ownedCosmetics", JSON.stringify(ownedCosmetics));
+  saveSpaceCoins();
+}
+
 function setDifficulty(level){
   difficulty = level;
   if(enemySpawnInterval) clearInterval(enemySpawnInterval);
@@ -161,34 +392,166 @@ function restartGame(){
 }
 
 function drawPlayer(){
-  ctx.fillStyle="white";
+  let p = cosmetics.player;
+  
+  if(p.type === "neon"){
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = p.color;
+    ctx.fillStyle = p.color;
+  } else if(p.type === "rainbow"){
+    ctx.fillStyle = `hsl(${rainbowHue},100%,50%)`;
+  } else if(p.type === "gold"){
+    ctx.fillStyle = "gold";
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = "orange";
+  } else if(p.type === "diamond"){
+    let gradient = ctx.createLinearGradient(playerX-playerSize, playerY-playerSize, playerX+playerSize, playerY+playerSize);
+    gradient.addColorStop(0, "cyan");
+    gradient.addColorStop(0.5, "white");
+    gradient.addColorStop(1, "blue");
+    ctx.fillStyle = gradient;
+  } else if(p.type === "fire"){
+    let gradient = ctx.createRadialGradient(playerX, playerY, 0, playerX, playerY, playerSize*2);
+    gradient.addColorStop(0, "yellow");
+    gradient.addColorStop(0.5, "orange");
+    gradient.addColorStop(1, "red");
+    ctx.fillStyle = gradient;
+  } else if(p.type === "ghost"){
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = "lightblue";
+  } else if(p.type === "toxic"){
+    ctx.shadowBlur = 25;
+    ctx.shadowColor = "lime";
+    ctx.fillStyle = "#00ff00";
+  } else if(p.type === "galaxy"){
+    ctx.fillStyle = "purple";
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = "magenta";
+  } else {
+    ctx.fillStyle = p.color;
+  }
+  
   ctx.beginPath();
   ctx.moveTo(playerX, playerY-playerSize);
   ctx.lineTo(playerX-playerSize, playerY+playerSize);
   ctx.lineTo(playerX+playerSize, playerY+playerSize);
   ctx.closePath();
   ctx.fill();
+  
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
 }
 
 function drawEnemy(e){
+  let enemy = cosmetics.enemy;
+  
   if(e.rainbow){
     ctx.fillStyle = `hsl(${rainbowHue},100%,50%)`;
+  } else if(enemy.type === "ice"){
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = "cyan";
+    ctx.fillStyle = e.special ? "gold" : "cyan";
+  } else if(enemy.type === "lava"){
+    let gradient = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, 15);
+    gradient.addColorStop(0, "yellow");
+    gradient.addColorStop(0.5, "orange");
+    gradient.addColorStop(1, "red");
+    ctx.fillStyle = e.special ? "gold" : gradient;
+  } else if(enemy.type === "crystal"){
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = "purple";
+    ctx.fillStyle = e.special ? "gold" : "purple";
+  } else if(enemy.type === "shadow"){
+    ctx.globalAlpha = 0.7;
+    ctx.shadowBlur = 25;
+    ctx.shadowColor = "black";
+    ctx.fillStyle = e.special ? "gold" : "grey";
+  } else if(enemy.type === "alien"){
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = "lime";
+    ctx.fillStyle = e.special ? "gold" : "lime";
   } else {
     ctx.fillStyle = e.special ? "gold" : "red";
   }
+  
   ctx.beginPath();
   ctx.moveTo(e.x, e.y-15);
   ctx.lineTo(e.x-15, e.y+15);
   ctx.lineTo(e.x+15, e.y+15);
   ctx.closePath();
   ctx.fill();
+  
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
 }
 
 function drawBullet(b){
-  ctx.fillStyle="lime";
-  ctx.beginPath();
-  ctx.arc(b.x,b.y,5,0,Math.PI*2);
-  ctx.fill();
+  let bullet = cosmetics.bullet;
+  
+  if(bullet.type === "laser"){
+    ctx.strokeStyle = bullet.color;
+    ctx.lineWidth = 3;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = bullet.color;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x, b.y+15);
+    ctx.stroke();
+  } else if(bullet.type === "plasma"){
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = "cyan";
+    ctx.fillStyle = "cyan";
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,8,0,Math.PI*2);
+    ctx.fill();
+  } else if(bullet.type === "rocket"){
+    ctx.fillStyle = "orange";
+    ctx.fillRect(b.x-3, b.y-8, 6, 16);
+    ctx.fillStyle = "red";
+    ctx.fillRect(b.x-2, b.y+8, 4, 5);
+  } else if(bullet.type === "star"){
+    ctx.fillStyle = "yellow";
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = "yellow";
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    for(let i=0; i<5; i++){
+      ctx.rotate(Math.PI*2/5);
+      ctx.beginPath();
+      ctx.moveTo(0,-8);
+      ctx.lineTo(-2,-3);
+      ctx.lineTo(-7,-3);
+      ctx.lineTo(-3,0);
+      ctx.lineTo(-5,5);
+      ctx.lineTo(0,2);
+      ctx.lineTo(5,5);
+      ctx.lineTo(3,0);
+      ctx.lineTo(7,-3);
+      ctx.lineTo(2,-3);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  } else if(bullet.type === "lightning"){
+    ctx.strokeStyle = "yellow";
+    ctx.lineWidth = 2;
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = "yellow";
+    ctx.beginPath();
+    ctx.moveTo(b.x-3, b.y);
+    ctx.lineTo(b.x+3, b.y-5);
+    ctx.lineTo(b.x-2, b.y-10);
+    ctx.lineTo(b.x+4, b.y-15);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = bullet.color;
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,5,0,Math.PI*2);
+    ctx.fill();
+  }
+  
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 1;
 }
 
 function drawText(t,x,y,s=30,c="white"){
@@ -198,7 +561,6 @@ function drawText(t,x,y,s=30,c="white"){
 function update(){
   if(pause || gameOver){ drawUI(); return; }
 
-  // Effet fond arc-en-ciel pendant admin abuse
   if(secretEvent){
     rainbowHue = (rainbowHue+2)%360;
     ctx.fillStyle = `hsl(${rainbowHue},100%,20%)`;
@@ -260,7 +622,7 @@ function update(){
   drawText("Difficulté: "+difficulty,10,120);
 
   if(isDev){
-    drawText("[DEV MODE] Clique sur 🔑 pour options",canvas.width-400,30,20,"yellow");
+    drawText("[DEV MODE] Appuie sur K pour le menu dev",canvas.width-450,30,18,"yellow");
   }
 
   if(secretEvent){
@@ -271,15 +633,126 @@ function update(){
 }
 
 function drawUI(){
+  // Dev Menu
+  if(devMenuOpen && isDev){
+    ctx.fillStyle = "rgba(0,0,0,0.95)";
+    ctx.fillRect(150,100,500,400);
+    ctx.strokeStyle = "lime";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(150,100,500,400);
+    
+    drawText("=== DEV MENU ===",280,140,30,"lime");
+    drawText("1) Coins infinis: " + (infiniteCoins?"ON":"OFF"),180,190,20,"white");
+    drawText("2) Invulnérabilité: " + (infiniteInvuln?"ON":"OFF"),180,220,20,"white");
+    drawText("3) +100k SpaceCoins",180,250,20,"white");
+    drawText("4) 999 Vies",180,280,20,"white");
+    drawText("5) Débloquer tous les cosmétiques",180,310,20,"white");
+    drawText("6) Vitesse MAX",180,340,20,"white");
+    drawText("7) Tir ultra-rapide",180,370,20,"white");
+    drawText("Appuie sur K pour fermer",250,440,18,"yellow");
+    
+    ctx.lineWidth = 1;
+    return;
+  }
+  
   if(shopOpen){
-    ctx.fillStyle="purple"; ctx.fillRect(100,100,600,400);
-    drawText("=== SHOP SPACECOINS ===",200,150,30);
-    drawText("1) Speed x2 (10000 SC)",200,220,25);
-    drawText("2) Invulnérabilité 1min (20000 SC)",200,260,25);
-    drawText("3) Mitraillette 1min (15000 SC)",200,300,25);
-    drawText("Tes SC: "+(infiniteCoins?"∞":spaceCoins),200,340,25);
+    let theme = cosmetics.ui.theme;
+    
+    if(theme === "dark"){
+      ctx.fillStyle = "rgba(20,20,20,0.95)";
+    } else if(theme === "neon"){
+      ctx.fillStyle = "rgba(50,0,100,0.95)";
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = "magenta";
+    } else if(theme === "gold"){
+      ctx.fillStyle = "rgba(100,80,0,0.95)";
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = "gold";
+    } else if(theme === "cyber"){
+      ctx.fillStyle = "rgba(0,50,100,0.95)";
+      ctx.shadowBlur = 25;
+      ctx.shadowColor = "cyan";
+    } else if(theme === "candy"){
+      ctx.fillStyle = "rgba(255,100,200,0.95)";
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = "pink";
+    } else if(theme === "matrix"){
+      ctx.fillStyle = "rgba(0,20,0,0.95)";
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = "lime";
+    } else {
+      ctx.fillStyle = "purple";
+    }
+    ctx.fillRect(50,50,700,500);
+    ctx.shadowBlur = 0;
+    
+    // Onglets
+    ctx.fillStyle = shopTab==="items" ? "orange" : "#444";
+    ctx.fillRect(60,60,150,40);
+    ctx.fillStyle = shopTab==="cosmetics" ? "orange" : "#444";
+    ctx.fillRect(220,60,150,40);
+    
+    drawText("Items [Tab]",70,88,18,"white");
+    drawText("Cosmétiques",225,88,18,"white");
+    
+    if(shopTab === "items"){
+      drawText("=== SHOP ITEMS ===",200,140,25,"yellow");
+      drawText("1) Speed x2 (10000 SC)",150,190,20);
+      drawText("2) Invulnérabilité 1min (20000 SC)",150,220,20);
+      drawText("3) Mitraillette 1min (15000 SC)",150,250,20);
+      drawText("Tes SC: "+(infiniteCoins?"∞":spaceCoins),150,300,22,"cyan");
+      drawText("Appuie sur 1, 2 ou 3 pour acheter",150,330,18,"lime");
+      drawText("Clique sur 'Cosmétiques' pour les skins !",150,360,16,"yellow");
+    } else {
+      drawText("=== COSMÉTIQUES ===",200,130,25,"yellow");
+      let y = 165;
+      drawText("JOUEUR:",100,y,18,"orange"); y+=20;
+      cosmeticShop.player.forEach(item=>{
+        let owned = ownedCosmetics.player.includes(item.type);
+        let equipped = cosmetics.player.type === item.type;
+        let prefix = equipped ? "✓" : (owned ? "◆" : item.key.toUpperCase());
+        drawText(prefix+") "+item.name+" ("+item.price+"SC)",100,y,16,owned?"lime":"white");
+        y+=18;
+      });
+      
+      y+=5;
+      drawText("BALLES:",100,y,18,"orange"); y+=20;
+      cosmeticShop.bullet.forEach(item=>{
+        let owned = ownedCosmetics.bullet.includes(item.type);
+        let equipped = cosmetics.bullet.type === item.type;
+        let prefix = equipped ? "✓" : (owned ? "◆" : item.key.toUpperCase());
+        drawText(prefix+") "+item.name+" ("+item.price+"SC)",100,y,16,owned?"lime":"white");
+        y+=18;
+      });
+      
+      y = 165;
+      drawText("ENNEMIS:",420,y,18,"orange"); y+=20;
+      cosmeticShop.enemy.forEach(item=>{
+        let owned = ownedCosmetics.enemy.includes(item.type);
+        let equipped = cosmetics.enemy.type === item.type;
+        let prefix = equipped ? "✓" : (owned ? "◆" : item.key.toUpperCase());
+        drawText(prefix+") "+item.name+" ("+item.price+"SC)",420,y,16,owned?"lime":"white");
+        y+=18;
+      });
+      
+      y+=5;
+      drawText("THÈMES UI:",420,y,18,"orange"); y+=20;
+      cosmeticShop.ui.forEach(item=>{
+        let owned = ownedCosmetics.ui.includes(item.theme);
+        let equipped = cosmetics.ui.theme === item.theme;
+        let prefix = equipped ? "✓" : (owned ? "◆" : item.key.toUpperCase());
+        drawText(prefix+") "+item.name+" ("+item.price+"SC)",420,y,16,owned?"lime":"white");
+        y+=18;
+      });
+      
+      drawText("Tes SC: "+(infiniteCoins?"∞":spaceCoins),100,510,20,"cyan");
+      drawText("✓=Équipé ◆=Possédé",100,535,16,"grey");
+    }
+    
     if(shopMessage && Date.now()<shopMessageTimer){
-      drawText(shopMessage,200,380,25,"red");
+      ctx.fillStyle = "rgba(0,0,0,0.8)";
+      ctx.fillRect(250,400,300,50);
+      drawText(shopMessage,270,430,22,shopMessage.includes("✓")?"lime":"red");
     }
   }
   if(pause){
